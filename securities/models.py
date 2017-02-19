@@ -1,0 +1,214 @@
+#coding: utf-8
+from __future__ import unicode_literals
+
+from django.db import models
+
+class Board(models.Model):
+    class Meta:
+        verbose_name = u'Режим торгов'
+        verbose_name_plural = u'Режимы торгов'
+        
+    board_id = models.CharField(max_length = 128,
+                                unique = True,
+                                verbose_name = u'Код режима',
+                                help_text = u'Идентификатор режима торгов')
+    
+    created_date = models.DateTimeField(auto_now_add = True)
+    modified_date = models.DateTimeField(auto_now = True)
+    
+    def __unicode__(self):
+        return u'%s' % self.board_id
+
+class AbstractSecurity(models.Model):
+    class Meta:
+        abstract = True
+    
+    sec_id = models.CharField(max_length = 128,
+                              null = True,
+                              blank = True,
+                              verbose_name = u'Код инструмента',
+                              help_text = u'Идентификатор финансового инструмента')
+    
+    board = models.ForeignKey('Board',
+                              on_delete = models.CASCADE,
+                              null = True,
+                              blank = True,
+                              verbose_name = u'Режим торгов')
+    
+    short_name = models.CharField(max_length = 1024,
+                              null = True,
+                              blank = True,
+                              verbose_name = u'Наименование',
+                              help_text = u'Краткое наименование')
+    
+    isin = models.CharField(max_length = 128,
+                            null = True,
+                            blank = True,
+                            verbose_name = u'ISIN код',
+                            help_text = u'ISIN код')
+    
+    face_value = models.DecimalField(max_digits=35,
+                                     decimal_places=15,
+                                     null = True,
+                                     blank = True,
+                                     verbose_name = u'Номинал',
+                                     help_text = u'Номинальная стоимость')
+    
+    created_date = models.DateTimeField(auto_now_add = True)
+    modified_date = models.DateTimeField(auto_now = True)
+    
+    def __unicode__(self):
+        return u'%s (%s)' % (self.short_name, self.sec_id)
+    
+    def has_history(self, date):
+        return self.history.filter(trade_date = date).count() > 0
+                                     
+
+class AbstractHistory(models.Model):
+    class Meta:
+        abstract = True
+        ordering = ['-trade_date', ]
+    
+    trade_date = models.DateField(verbose_name = u'Дата торгов')
+    
+    num_trades = models.IntegerField(null = True,
+                                     blank = True,
+                                     verbose_name = u'Сделок, шт.',
+                                     help_text = u'Количество сделок за день, штук')
+    
+    value = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                                null = True,
+                                blank = True,
+                                verbose_name = u'Объем',
+                                help_text = u'Объем сделок в валюте ценной бумаги')
+    
+    open = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Первая',
+                               help_text = u'Цена предторгового периода/Цена аукциона открытия')
+    
+    low = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Минимум',
+                               help_text = u'Цена сделки минимальная')
+    
+    high = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Максимум',
+                               help_text = u'Максимальная цена сделки')
+    
+    close = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Последняя',
+                               help_text = u'Цена последней сделки')
+    
+    legal_close_price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Закрытия',
+                               help_text = u'Цена закрытия')
+    
+    war_price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Срвзв. цена',
+                               help_text = u'Средневзвешенная цена')
+
+class Share(AbstractSecurity):
+    class Meta:
+        verbose_name = u'Акция'
+        verbose_name_plural = u'Акции'
+    
+    dividend_flag = models.BooleanField(default = False,
+                                        verbose_name = u'Дивидендная',
+                                        help_text = u'Дивидендная акция')
+
+class DividendHistory(models.Model):
+    class Meta:
+        verbose_name = u'Дивидендная выплата'
+        verbose_name_plural = u'Дивидендные выплаты'
+        unique_together = ('share', 'date_registry_close')
+        ordering = ['-date_registry_close']
+    
+    share = models.ForeignKey('Share',
+                              related_name = 'dividends',
+                              verbose_name = u'Акция')
+    
+    forecast_flag = models.BooleanField(verbose_name = u'Прогноз',
+                                        help_text = u'Прогноз дивидендной выплаты')
+    
+    date_registry_close = models.DateField(verbose_name = u'Дата закрытия реестра')
+    
+    date_payment = models.DateField(verbose_name = u'Дата выплаты')
+    
+    dividend = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Дивиденд',
+                               help_text = u'Размер выплаты дивиденда на одну акцию')
+    
+    profit_percent = models.DecimalField(max_digits=6,
+                                decimal_places=3,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Процент от прибыли',
+                               help_text = u'Какой процент от прибыли компании был выплачен в качестве дивидендов')
+    
+    def __unicode__(self):
+        return u'%s - %s (%s)' % (self.share, self.date_registry_close, self.dividend)
+    
+    @staticmethod
+    def get(share, date):
+        return DividendHistory.objects.filter(share = share, date_registry_close = date).all()[0]
+    
+    @staticmethod
+    def has(share, date):
+        return DividendHistory.objects.filter(share = share, date_registry_close = date).count() > 0
+    
+    @staticmethod
+    def update(share, date_registry_close, date_payment, dividend, profit, forecast, create = False):
+        dh = DividendHistory()
+        if not create and DividendHistory.has(share, date_registry_close):
+            dh = DividendHistory.get(share, date_registry_close)
+        else:
+            dh.share = share
+            dh.date_registry_close = date_registry_close
+        dh.date_payment = date_payment
+        dh.dividend = dividend
+        dh.profit_percent = profit
+        dh.forecast_flag = forecast
+        dh.save()
+        return dh
+
+class ShareHistory(AbstractHistory):
+    class Meta:
+        unique_together = ('trade_date', 'share')
+        verbose_name = u'История акции'
+        verbose_name_plural = u'Истории акций'
+
+    share = models.ForeignKey('Share',
+                              related_name = 'history',
+                              verbose_name = u'Акция')
+    
+    def __unicode__(self):
+        return u'%s %s' % (self.trade_date, self.share)
+    
+    @staticmethod
+    def get(share, date):
+        return ShareHistory.objects.filter(share = share).filter(trade_date = date)[0]
+    
+    @staticmethod
+    def has(share, date):
+        return ShareHistory.objects.filter(share = share).filter(trade_date = date).count() > 0

@@ -1,0 +1,274 @@
+#coding: utf-8
+
+from __future__ import unicode_literals
+
+import datetime
+from decimal import Decimal
+from django.db import models
+import django
+from django.db.models.signals import post_save, post_delete
+
+from dinv.utils import daterange
+from securities.models import ShareHistory
+
+class ShareItem(models.Model):
+    class Meta:
+        unique_together = ('share', 'portfolio')
+        verbose_name = u'Пакет акций'
+        verbose_name_plural = u'Пакеты акций'
+
+    share = models.ForeignKey('securities.Share',
+                              verbose_name = u'Акция')
+    
+    portfolio = models.ForeignKey('portfolio.Portfolio',
+                                  related_name = 'shares',
+                                  verbose_name = u'Портфель')
+    
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество акций')
+    
+    avg_price = models.DecimalField(max_digits=35,
+                                    decimal_places=15,
+                                    verbose_name = u'Средняя',
+                                    help_text = u'Средняя цена')
+    
+    def __unicode__(self):
+        return u'%s (%s)' % (self.portfolio, self.share)
+    
+    def percent(self):
+        return self.balance() / self.price() * Decimal(100.0)
+    
+    def price(self):
+        return self.avg_price * self.volume
+    
+    def balance(self):
+        return self.last_history().price() - self.price()
+    
+    def get_volume_and_price(self, date):
+        volume = 0
+        volume_plus = 0
+        price = Decimal()
+        for t in self.transactions.filter(date__lte = datetime.datetime.combine(date, datetime.datetime.max.time())):
+            if t.action == ShareTransaction.TYPE_BUY:
+                volume += t.volume
+                volume_plus += t.volume
+                price  += t.total_price()
+            else:
+                volume -= t.volume
+        avg_price = 0
+        if volume_plus > 0:
+            avg_price = price / volume_plus
+        else:
+            avg_price = 0
+        return volume, avg_price
+    
+    def update_from_transactions(self):
+        self.volume, self.avg_price = self.get_volume_and_price(django.utils.timezone.today())
+        self.save()
+    
+    def first_transaction(self):
+        return self.transactions.order_by('date').all()[0]
+    
+    def last_history(self):
+        return self.history.latest('date')
+    
+    def last_history_date(self, date):
+        return self.history.filter(date__lte = date).order_by('-date')[0]
+    
+    def update_history(self, date = django.utils.timezone.now().date() - datetime.timedelta(1)):
+        first_date = self.first_transaction().date.date()
+        for d in daterange(first_date, date):
+            print 'Updating date %s' % d
+            print ShareItemHistory.update(self, d)
+    
+    
+    def update_dividends(self, date = django.utils.timezone.now().date() - datetime.timedelta(1)):
+        date_max = datetime.datetime.combine(date, datetime.datetime.max.time())
+        date_min = datetime.datetime.combine(self.first_transaction().date.date(), datetime.datetime.min.time())
+        ds = self.share.dividends.filter(date_registry_close__lte = date_max).filter(date_registry_close__gte = date_min)
+        for d in ds:
+            sid = ShareItemDividend()
+            sid.share_item = self
+            sid.dividend = d
+            sid.checked = False
+            if ShareItemDividend.has(self, d):
+                sid = ShareItemDividend.get(self, d)
+            if sid.checked:
+                continue
+            sid.price_no_tax = d.dividend * self.volume
+            sid.percent = Decimal(sid.price() / self.last_history_date(d.date_registry_close).price() * Decimal(100.0))
+            sid.save()
+   
+    def price_all_dividends(self):
+        price = Decimal(0)
+        for d in self.dividends.all():
+            price += d.price()
+        return price
+            
+
+class ShareTransaction(models.Model):
+    class Meta:
+        ordering = ['-date', ]
+        verbose_name = u'Сделка'
+        verbose_name_plural = u'Сделки'
+        
+    TYPE_SELL = 0
+    TYPE_BUY  = 1
+    
+    TYPE = (
+        (TYPE_SELL, u'Продажа'),
+        (TYPE_BUY,  u'Покупка')
+        )
+    
+    share_item = models.ForeignKey('ShareItem',
+                              verbose_name = u'Актив',
+                              related_name = 'transactions',
+                              help_text = u'Сделка по какому активу')
+    
+    action = models.IntegerField(choices = TYPE,
+                               verbose_name = u'Действие',
+                               help_text = u'Действие по кативу: покупка/продажа'
+                               )
+    
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество акций')
+    
+    price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                                verbose_name = u'Цена',
+                                help_text = u'Цена одной ценной бумаги')
+    
+    date = models.DateTimeField(default = django.utils.timezone.now,
+                                verbose_name = u'Дата',
+                                help_text = u'Дата сделки')
+    
+    comment = models.TextField(blank = True,
+                               null = True,
+                               verbose_name = u'Комментарий')
+    
+    def total_price(self):
+        return self.price * self.volume
+
+def update_from_transactions(sender, instance, **kwargs):
+    instance.share_item.update_from_transactions()
+    
+post_save.connect(update_from_transactions, sender = ShareTransaction)
+post_delete.connect(update_from_transactions, sender = ShareTransaction)
+
+class ShareItemDividend(models.Model):
+    class Meta:
+        ordering = ['-dividend__date_registry_close', ]
+        unique_together = ('share_item', 'dividend')
+        verbose_name = u'Выплаченный дивиденд'
+        verbose_name_plural = u'Выплаченные дивиденды'
+        
+    share_item = models.ForeignKey('ShareItem',
+                              verbose_name = u'Актив',
+                              related_name = 'dividends',
+                              help_text = u'История дивидендов')
+                              
+    dividend = models.ForeignKey('securities.DividendHistory',
+                              verbose_name = u'Дивиденд')
+    
+    price_no_tax = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'Сумма выплат',
+                               help_text = u'Сумма выплат без налога')
+                               
+    tax = models.DecimalField(default = Decimal("13"),
+                                max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'НДФЛ, %',
+                               help_text = u'Величина налога')
+    
+    checked = models.BooleanField(default = False,
+                                  verbose_name = u'Подтверждена',
+                                  help_text = u'Подтверждение получения дивидендов на счет')
+    
+    percent = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                                blank = True,
+                               null = True,
+                               verbose_name = u'Доходность, %',
+                               help_text = u'Доходность на дату выплаты с учетом налога, %')
+    
+    def price(self):
+        return self.price_no_tax * (Decimal(100.0) - self.tax) / Decimal(100.0)
+    
+    
+    @staticmethod
+    def has(share_item, dividend):
+        return ShareItemDividend.objects.filter(share_item = share_item).filter(dividend = dividend).count() > 0
+    
+    @staticmethod
+    def get(share_item, dividend):
+        return ShareItemDividend.objects.filter(share_item = share_item).filter(dividend = dividend)[0]
+    
+                              
+
+class ShareItemHistory(models.Model):
+    class Meta:
+        ordering = ['-date', ]
+        unique_together = ('share_item', 'date')
+        verbose_name = u'История пакета акций'
+        verbose_name_plural = u'Истории пакетов акций'
+    
+    share_item = models.ForeignKey('ShareItem',
+                              verbose_name = u'Актив',
+                              related_name = 'history',
+                              help_text = u'История актива')
+    
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество акций')
+    
+    legal_close_price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'Закрытия',
+                               help_text = u'Цена закрытия')
+    
+    avg_price = models.DecimalField(max_digits=35,
+                                    decimal_places=15,
+                                    verbose_name = u'Средняя',
+                                    help_text = u'Средняя цена')
+    
+    date = models.DateField(verbose_name = u'Дата торгов')
+    
+    def price(self):
+        return self.legal_close_price * self.volume
+    
+    def buy_price(self):
+        return self.avg_price * self.volume
+    
+    def balance(self):
+        return self.price() - self.buy_price()
+    
+    def __unicode__(self):
+        return u'%s - %s - %s' % (self.share_item, self.date, self.price())
+    
+    @staticmethod
+    def get(share_item, date):
+        return ShareItemHistory.objects.filter(share_item = share_item, date = date).all()[0]
+    
+    @staticmethod
+    def has(share_item, date):
+        return ShareItemHistory.objects.filter(share_item = share_item, date = date).count() > 0
+    
+    @staticmethod
+    def update(share_item, date, create = False):
+        if not create and not ShareHistory.has(share_item.share, date):
+            return None
+
+        sih = ShareItemHistory()
+        if not create and ShareItemHistory.has(share_item, date):
+            sih = ShareItemHistory.get(share_item, date)
+        else:
+            sih.share_item = share_item
+            sih.date = date
+        sih.legal_close_price = ShareHistory.get(share_item.share, date).legal_close_price
+        sih.volume, sih.avg_price = share_item.get_volume_and_price(date)
+        sih.save()
+        return sih
+    
+    @staticmethod
+    def create(share_item, date):
+        return ShareItemHistory.update(share_item, date, True)
