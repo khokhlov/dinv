@@ -63,7 +63,7 @@ class ShareItem(models.Model):
         return volume, avg_price
     
     def update_from_transactions(self):
-        self.volume, self.avg_price = self.get_volume_and_price(django.utils.timezone.today())
+        self.volume, self.avg_price = self.get_volume_and_price(django.utils.timezone.now().date())
         self.save()
     
     def first_transaction(self):
@@ -148,6 +148,18 @@ class ShareTransaction(models.Model):
     
     def total_price(self):
         return self.price * self.volume
+    
+    @staticmethod
+    def create(share_item, action, volume, price, date, comment):
+        s = ShareTransaction()
+        s.share_item = share_item
+        s.action = action
+        s.volume = volume
+        s.price = price
+        s.date = date
+        s.comment = comment
+        s.save()
+        return s
 
 def update_from_transactions(sender, instance, **kwargs):
     instance.share_item.update_from_transactions()

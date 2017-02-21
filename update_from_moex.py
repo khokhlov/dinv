@@ -55,3 +55,18 @@ for s in Share.objects.all():
                     s.save()
         else:
             print 'Skip date %s for share %s.' % (d, s)
+
+from currency.models import Currency, CurrencyRate
+
+MOEX_URL_USDFIX = 'http://moex.com/export/markets/currency/fixing.aspx?code=USDFIX&moment_start=2012-01-01&moment_end=%s'
+url = MOEX_URL_USDFIX % DATE_TO
+xml_data = urllib.urlopen(url).read()
+root = ET.fromstring(xml_data)
+c1 = Currency.get('USD')
+c2 = Currency.get('RUB')
+for row in root.iter('rate'):
+    date = datetime.datetime.strptime(row.get('Moment'), "%Y-%m-%d").date()
+    rate = Decimal(row.get('Value'))
+    print CurrencyRate.update(c1, c2, rate, date)
+
+
