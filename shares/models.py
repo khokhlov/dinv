@@ -3,13 +3,20 @@
 from __future__ import unicode_literals
 
 import datetime
+import csv
 from decimal import Decimal
 from django.db import models
 import django
 from django.db.models.signals import post_save, post_delete
+from django.db import transaction
 
 from dinv.utils import daterange
-from securities.models import ShareHistory
+from securities.models import ShareHistory, Share
+
+def UnicodeDictReader(utf8_data, **kwargs):
+    csv_reader = csv.DictReader(utf8_data, **kwargs)
+    for row in csv_reader:
+        yield {unicode(key, 'utf-8'):unicode(value, 'utf-8') for key, value in row.iteritems()}
 
 class ShareItem(models.Model):
     class Meta:
@@ -31,6 +38,26 @@ class ShareItem(models.Model):
                                     decimal_places=15,
                                     verbose_name = u'Средняя',
                                     help_text = u'Средняя цена')
+    
+    @staticmethod
+    def get(portfolio, share):
+        return ShareItem.objects.filter(portfolio = portfolio).filter(share = share)[0]
+    
+    @staticmethod
+    def has(portfolio, share):
+        return ShareItem.objects.filter(portfolio = portfolio).filter(share = share).count() > 0
+    
+    @staticmethod
+    def get_or_create(portfolio, share):
+        if ShareItem.has(portfolio, share):
+            return ShareItem.get(portfolio, share)
+        s = ShareItem()
+        s.portfolio = portfolio
+        s.share = share
+        s.volume = 0
+        s.avg_price = Decimal("0")
+        s.save()
+        return s
     
     def __unicode__(self):
         return u'%s (%s)' % (self.portfolio, self.share)
@@ -160,6 +187,28 @@ class ShareTransaction(models.Model):
         s.comment = comment
         s.save()
         return s
+    
+    @staticmethod
+    @transaction.atomic
+    def load_csv(path, portfolio, cols):
+        reader = UnicodeDictReader(open(path, 'r'), delimiter=str(u','), quotechar=str(u'"'))
+        for row in reader:
+            print row.keys()
+            sec_id = row[cols['sec_id']]
+            s = None
+            try:
+                s = Share.objects.filter(sec_id = sec_id)[0]
+            except:
+                print 'Share key error:', sec_id
+            share_item = ShareItem.get_or_create(portfolio, s)
+            action = ShareTransaction.TYPE_SELL
+            if row[cols['action']] == cols['action_buy']:
+                action = ShareTransaction.TYPE_BUY
+            date = datetime.datetime.strptime(row[cols['date']], "%d.%m.%Y").date()
+            volume = int(row[cols['volume']])
+            price = Decimal(row[cols['price']].replace(',', '.'))
+            print ShareTransaction.create(share_item, action, volume, price, date, '')
+    
 
 def update_from_transactions(sender, instance, **kwargs):
     instance.share_item.update_from_transactions()
