@@ -26,9 +26,10 @@ ShareTransaction.load_csv(sys.argv[2], p, {
     'sec_id': u'Код инструмента',
     'action': u'B/S',
     'action_buy': u'Покупка',
-    'date': u'Дата расчета',
+    'date': u'Дата заключения',
     'volume': u'Кол-во',
     'price': u'Цена',
+    'key': u'Номер сделки',
 })
 
 

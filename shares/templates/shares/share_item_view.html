@@ -121,6 +121,10 @@ function zoomChart() {
 {% block content %}
 <h1>Сегодня {% now "d m Y, l" %}</h1>
 
+<span style="font-size: 100%;">Портфель: <a href="{% url 'portfolio_item' item.portfolio.id %}">{{ item.portfolio.name }}</a></span>
+<br/>
+<br/>
+
 <span style="font-size: 200%; color:black">{{ item.share.short_name }} ({{ item.share.sec_id }}): {{ item.last_history.price|floatformat:2 }}</span>
 
 {% if item.balance > 0 %}

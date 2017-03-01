@@ -7,5 +7,6 @@ admin.autodiscover()
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     url(r'^shares/', include('shares.urls')),
+    url(r'^portfolio/', include('portfolio.urls')),
 ]
 

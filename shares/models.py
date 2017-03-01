@@ -64,7 +64,7 @@ class ShareItem(models.Model):
     
     def percent(self):
         return self.balance() / self.price() * Decimal(100.0)
-    
+        
     def price(self):
         return self.avg_price * self.volume
     
@@ -173,11 +173,17 @@ class ShareTransaction(models.Model):
                                null = True,
                                verbose_name = u'Комментарий')
     
+    key = models.CharField(max_length = 1024,
+                              null = True,
+                              blank = True,
+                              verbose_name = u'Ключ сделки',
+                              help_text = u'Уникальный номер сделки для автопарсинга')
+    
     def total_price(self):
         return self.price * self.volume
     
     @staticmethod
-    def create(share_item, action, volume, price, date, comment):
+    def create(share_item, action, volume, price, date, comment, key = None):
         s = ShareTransaction()
         s.share_item = share_item
         s.action = action
@@ -185,6 +191,7 @@ class ShareTransaction(models.Model):
         s.price = price
         s.date = date
         s.comment = comment
+        s.key = key
         s.save()
         return s
     
@@ -193,7 +200,6 @@ class ShareTransaction(models.Model):
     def load_csv(path, portfolio, cols):
         reader = UnicodeDictReader(open(path, 'r'), delimiter=str(u','), quotechar=str(u'"'))
         for row in reader:
-            print row.keys()
             sec_id = row[cols['sec_id']]
             s = None
             try:
@@ -201,13 +207,21 @@ class ShareTransaction(models.Model):
             except:
                 print 'Share key error:', sec_id
             share_item = ShareItem.get_or_create(portfolio, s)
+            
+            # сначала проверяем ключ
+            key = row[cols['key']]
+            if ShareTransaction.objects.filter(share_item = share_item).filter(key = key).count() > 0:
+                print 'Skip transaction with key:', key
+                continue
+            
             action = ShareTransaction.TYPE_SELL
             if row[cols['action']] == cols['action_buy']:
                 action = ShareTransaction.TYPE_BUY
-            date = datetime.datetime.strptime(row[cols['date']], "%d.%m.%Y").date()
+            print row[cols['date']]
+            date = datetime.datetime.strptime(row[cols['date']], "%d.%m.%Y %H:%M:%S")
             volume = int(row[cols['volume']])
             price = Decimal(row[cols['price']].replace(',', '.'))
-            print ShareTransaction.create(share_item, action, volume, price, date, '')
+            print ShareTransaction.create(share_item, action, volume, price, date, '', key)
     
 
 def update_from_transactions(sender, instance, **kwargs):
