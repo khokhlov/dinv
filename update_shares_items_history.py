@@ -25,8 +25,14 @@ def daterange(start_date, end_date):
     for n in range(int ((end_date - start_date).days + 1)):
         yield start_date + timedelta(n)
 
-for si in ShareItem.objects.all():
+if len(sys.argv) > 1:
+    si = ShareItem.objects.get(pk = sys.argv[1])
     print 'Updating %s' % si
     si.update_history()
     si.update_dividends()
+else:
+    for si in ShareItem.objects.all():
+        print 'Updating %s' % si
+        si.update_history()
+        si.update_dividends()
 
