@@ -131,6 +131,15 @@ class ShareItem(models.Model):
         for d in self.dividends.all():
             price += d.price()
         return price
+    
+    def dividend_yield(self):
+        return self.price_all_dividends() / self.price() * Decimal(100.0)
+    
+    def balance_with_dividends(self):
+        return self.balance() + self.price_all_dividends()
+    
+    def percent_with_dividends(self):
+        return self.balance_with_dividends() / self.price() * Decimal(100.0)
             
 
 class ShareTransaction(models.Model):

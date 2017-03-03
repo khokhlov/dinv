@@ -133,6 +133,16 @@ function zoomChart() {
 <span style="font-size: 200%; color:red">&nbsp;  {{ item.balance|floatformat:2 }}( {{ item.percent|floatformat:2 }}%)</span>
 {% endif %}
 
+{% if item.share.dividend_flag %}
+<br/>
+<span style="font-size: 100%; color:black">С учетом дивидендов:</span>
+
+{% if item.balance_with_dividends > 0 %}
+<span style="font-size: 100%; color:green">&nbsp; +{{ item.balance_with_dividends|floatformat:2 }} ({{ item.percent_with_dividends|floatformat:2 }}%)</span>
+{% else %}
+<span style="font-size: 100%; color:red">&nbsp;  {{ item.balance_with_dividends|floatformat:2 }}( {{ item.percent_with_dividends|floatformat:2 }}%)</span>
+{% endif %}
+{% endif %}
 
 <hr/>
 <div id="chartdiv"></div>

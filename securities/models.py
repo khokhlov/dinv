@@ -159,8 +159,8 @@ class DividendHistory(models.Model):
                                verbose_name = u'Дивиденд',
                                help_text = u'Размер выплаты дивиденда на одну акцию')
     
-    profit_percent = models.DecimalField(max_digits=6,
-                                decimal_places=3,
+    profit_percent = models.DecimalField(max_digits=10,
+                                decimal_places=5,
                                null = True,
                                blank = True,
                                verbose_name = u'Процент от прибыли',

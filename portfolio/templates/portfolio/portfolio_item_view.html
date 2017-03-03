@@ -24,6 +24,16 @@
 <span style="font-size: 200%; color:red">&nbsp;  {{ item.shares_balance|floatformat:2 }}( {{ item.shares_yield|floatformat:2 }}%)</span>
 {% endif %}
 
+<br/>
+<span style="font-size: 100%; color:black">С учетом дивидендов:</span>
+
+{% if item.shares_balance_dividends > 0 %}
+<span style="font-size: 100%; color:green">&nbsp; +{{ item.shares_balance_dividends|floatformat:2 }} ({{ item.shares_yield_dividends|floatformat:2 }}%)</span>
+{% else %}
+<span style="font-size: 100%; color:red">&nbsp;  {{ item.shares_balance_dividends|floatformat:2 }}( {{ item.shares_yield_dividends|floatformat:2 }}%)</span>
+{% endif %}
+
+
 <table>
     <tr>
         <th>Инструмент</th>
@@ -33,6 +43,8 @@
         <th>Прибыль</th>
         <th>Сумма</th>
         <th>Доля, %</th>
+        <th>Дивиденды</th>
+        <th>Прибыль с дивидендами</th>
     </tr>
     {% for s in shares_info.shares %}
     <tr>
@@ -49,6 +61,14 @@
         </td>
         <td>{{ s.last_history.price|floatformat:2 }}</td>
         <td>{{ s.portion|floatformat:2 }}</td>
+        <td>{{ s.price_all_dividends|floatformat:2 }} ({{ s.dividend_yield|floatformat:2 }} %)</td>
+        <td>
+        {% if s.percent_with_dividends > 0 %}
+        <span style="color:green">+{{ s.percent_with_dividends|floatformat:2 }} %</span>
+        {% else %}
+        <span style="color:red">{{ s.percent_with_dividends|floatformat:2 }} %</span>
+        {% endif %}
+        </td>
     </tr>
     {% endfor %}
 </table>

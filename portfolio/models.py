@@ -37,6 +37,19 @@ class Portfolio(models.Model):
     def shares_yield(self):
         return self.shares_balance() / self.shares_price() * Decimal(100.0)
     
+    def shares_dividends(self):
+        d = Decimal(0)
+        for s in self.shares.all():
+            d += s.price_all_dividends()
+        return d
+    
+    def shares_balance_dividends(self):
+        return self.shares_balance() + self.shares_dividends()
+    
+    def shares_yield_dividends(self):
+        return self.shares_balance_dividends() / self.shares_price() * Decimal(100.0)
+    
+    
     def shares_info(self):
         sp = self.shares_price()
         ret = {
