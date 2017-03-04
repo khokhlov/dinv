@@ -212,3 +212,45 @@ class ShareHistory(AbstractHistory):
     @staticmethod
     def has(share, date):
         return ShareHistory.objects.filter(share = share).filter(trade_date = date).count() > 0
+
+
+class Bond(AbstractSecurity):
+    class Meta:
+        verbose_name = u'Облигация'
+        verbose_name_plural = u'Облигации'
+    
+class BondHistory(AbstractHistory):
+    class Meta:
+        unique_together = ('trade_date', 'bond')
+        verbose_name = u'История облигации'
+        verbose_name_plural = u'Истории облигаций'
+
+    bond = models.ForeignKey('Bond',
+                              related_name = 'history',
+                              verbose_name = u'Облигация')
+
+    accint = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'НКД',
+                               help_text = u'Накопленный купонный доход (НКД), по одной ценной бумаге')
+
+    yield_close = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Доходность, % годовых - последней сделки',
+                               help_text = u'Доходность по цене последней сделки, % годовых')
+
+    
+    def __unicode__(self):
+        return u'%s %s' % (self.trade_date, self.bond)
+    
+    @staticmethod
+    def get(bond, date):
+        return BondHistory.objects.filter(bond = bond).filter(trade_date = date)[0]
+    
+    @staticmethod
+    def has(bond, date):
+        return BondHistory.objects.filter(bond = bond).filter(trade_date = date).count() > 0

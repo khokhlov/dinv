@@ -23,3 +23,7 @@ admin.site.register(ShareHistory, HistoryAdmin)
 
 admin.site.register(DividendHistory, DividendHistoryAdmin)
 
+admin.site.register(Bond, SecurityAdmin)
+
+admin.site.register(BondHistory, HistoryAdmin)
+
