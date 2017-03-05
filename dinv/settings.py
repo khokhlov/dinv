@@ -42,7 +42,7 @@ INSTALLED_APPS = (
     'portfolio.apps.PortfolioConfig',
     'accounts.apps.AccountsConfig',
     'currency.apps.CurrencyConfig',
-    
+    'bonds.apps.BondsConfig',
     
 )
 

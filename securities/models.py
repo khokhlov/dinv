@@ -2,6 +2,11 @@
 from __future__ import unicode_literals
 
 from django.db import models
+import django
+import datetime
+from dinv.utils import daterange
+from dinv.utils import UnicodeDictReader
+
 
 class Board(models.Model):
     class Meta:
@@ -254,3 +259,228 @@ class BondHistory(AbstractHistory):
     @staticmethod
     def has(bond, date):
         return BondHistory.objects.filter(bond = bond).filter(trade_date = date).count() > 0
+
+
+
+class AbstractSecurityItem(models.Model):
+    class Meta:
+        verbose_name = u'Пакет бумаг'
+        verbose_name_plural = u'Пакеты бумаг'
+        abstract = True
+
+    HistoryModel = None
+    TransactionModel = None
+    ThisModel = None
+    IncomeModel = None
+
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество бумаг')
+    
+    avg_price = models.DecimalField(max_digits=35,
+                                    decimal_places=15,
+                                    verbose_name = u'Средняя',
+                                    help_text = u'Средняя цена')
+    
+    @staticmethod
+    def get(clazz, portfolio, sec):
+        return clazz.objects.filter(portfolio = portfolio).filter(sec = sec)[0]
+    
+    @staticmethod
+    def has(clazz, portfolio, sec):
+        return clazz.objects.filter(portfolio = portfolio).filter(sec = sec).count() > 0
+    
+    @staticmethod
+    def get_or_create(clazz, portfolio, sec):
+        if clazz.has(portfolio, sec):
+            return clazz.get(portfolio, sec)
+        s = clazz()
+        s.portfolio = portfolio
+        s.sec = sec
+        s.volume = 0
+        s.avg_price = Decimal("0")
+        s.save()
+        return s
+    
+    def __unicode__(self):
+        return u'%s (%s)' % (self.portfolio, self.sec)
+    
+    def percent(self):
+        return self.balance() / self.price() * Decimal(100.0)
+        
+    def price(self):
+        return self.avg_price * self.volume
+    
+    def balance(self):
+        return self.last_history().price() - self.price()
+    
+    def get_volume_and_price(self, date):
+        volume = 0
+        volume_plus = 0
+        price = Decimal()
+        for t in self.transactions.filter(date__lte = datetime.datetime.combine(date, datetime.datetime.max.time())):
+            if t.action == self.TransactionModel.TYPE_BUY:
+                volume += t.volume
+                volume_plus += t.volume
+                price  += t.total_price()
+            else:
+                volume -= t.volume
+        avg_price = 0
+        if volume_plus > 0:
+            avg_price = price / volume_plus
+        else:
+            avg_price = 0
+        return volume, avg_price
+    
+    def update_from_transactions(self, clazz):
+        self.volume, self.avg_price = self.get_volume_and_price(django.utils.timezone.now().date())
+        self.save()
+    
+    def first_transaction(self):
+        return self.transactions.order_by('date').all()[0]
+    
+    def last_history(self):
+        return self.history.latest('date')
+    
+    def last_history_date(self, date):
+        return self.history.filter(date__lte = date).order_by('-date')[0]
+    
+    def update_history(self, date = django.utils.timezone.now().date() - datetime.timedelta(1)):
+        first_date = self.first_transaction().date.date()
+        for d in daterange(first_date, date):
+            print 'Updating date %s' % d
+            print self.HistoryModel.update(self, d)
+    
+    
+    def update_income(self, date = django.utils.timezone.now().date() - datetime.timedelta(1)):
+        date_max = datetime.datetime.combine(date, datetime.datetime.max.time())
+        date_min = datetime.datetime.combine(self.first_transaction().date.date(), datetime.datetime.min.time())
+        ds = self.sec.income.filter(date_registry_close__lte = date_max).filter(date_registry_close__gte = date_min)
+        for d in ds:
+            sid = self.IncomeModel()
+            sid.sec_item = self
+            sid.dividend = d
+            sid.checked = False
+            if clazz.has(self, d):
+                sid = clazz.get(self, d)
+            if sid.checked:
+                continue
+            sid.price_no_tax = d.income * self.volume
+            sid.percent = Decimal(sid.price() / self.last_history_date(d.date_registry_close).price() * Decimal(100.0))
+            sid.save()
+   
+    def price_all_income(self):
+        price = Decimal(0)
+        for d in self.income.all():
+            price += d.price()
+        return price
+    
+    def income_yield(self):
+        return self.price_all_incoms() / self.price() * Decimal(100.0)
+    
+    def balance_with_income(self):
+        return self.balance() + self.price_all_income()
+    
+    def percent_with_income(self):
+        return self.balance_with_income() / self.price() * Decimal(100.0)
+
+class AbstractItemTransaction(models.Model):
+    class Meta:
+        ordering = ['-date', ]
+        verbose_name = u'Сделка'
+        verbose_name_plural = u'Сделки'
+        abstract = True
+        
+    TYPE_SELL = 0
+    TYPE_BUY  = 1
+    
+    TYPE = (
+        (TYPE_SELL, u'Продажа'),
+        (TYPE_BUY,  u'Покупка')
+        )
+        
+    action = models.IntegerField(choices = TYPE,
+                               verbose_name = u'Действие',
+                               help_text = u'Действие по кативу: покупка/продажа'
+                               )
+    
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество облигаций')
+    
+    price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                                verbose_name = u'Цена',
+                                help_text = u'Цена одной ценной бумаги')
+    
+    date = models.DateTimeField(default = django.utils.timezone.now,
+                                verbose_name = u'Дата',
+                                help_text = u'Дата сделки')
+    
+    comment = models.TextField(blank = True,
+                               null = True,
+                               verbose_name = u'Комментарий')
+    
+    key = models.CharField(max_length = 1024,
+                              null = True,
+                              blank = True,
+                              verbose_name = u'Ключ сделки',
+                              help_text = u'Уникальный номер сделки для автопарсинга')
+    
+    def total_price(self):
+        return self.price * self.volume
+    
+    @staticmethod
+    def create(clazz, sec_item, action, volume, price, date, comment, key = None):
+        s = clazz()
+        s.sec_item = sec_item
+        s.action = action
+        s.volume = volume
+        s.price = price
+        s.date = date
+        s.comment = comment
+        s.key = key
+        s.save()
+        return s
+
+class AbstractItemHistory(models.Model):
+    class Meta:
+        ordering = ['-date', ]
+        verbose_name = u'История пакета бумаг'
+        verbose_name_plural = u'Истории пакетов бумаг'
+        abstract = True
+    
+    volume = models.IntegerField(verbose_name = u'Количество',
+                                help_text = u'Количество облигаций')
+    
+    legal_close_price = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'Закрытия',
+                               help_text = u'Цена закрытия')
+    
+    avg_price = models.DecimalField(max_digits=35,
+                                    decimal_places=15,
+                                    verbose_name = u'Средняя',
+                                    help_text = u'Средняя цена')
+
+    
+    date = models.DateField(verbose_name = u'Дата торгов')
+    
+    def price(self):
+        return self.legal_close_price * self.volume / Decimal(100)
+    
+    def buy_price(self):
+        return self.avg_price * self.volume
+    
+    def balance(self):
+        return self.price() - self.buy_price()
+    
+    def __unicode__(self):
+        return u'%s - %s - %s' % (self.sec_item, self.date, self.price())
+    
+    @staticmethod
+    def get(clazz, sec_item, date):
+        return clazz.objects.filter(sec_item = sec_item, date = date).all()[0]
+    
+    @staticmethod
+    def has(clazz, sec_item, date):
+        return clazz.objects.filter(sec_item = sec_item, date = date).count() > 0
+    
