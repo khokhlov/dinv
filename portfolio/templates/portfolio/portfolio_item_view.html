@@ -25,7 +25,7 @@
 {% endif %}
 
 <br/>
-<span style="font-size: 100%; color:black">С учетом дивидендов:</span>
+<span style="font-size: 100%; color:black">С учетом выплаченных дивидендов:</span>
 
 {% if item.shares_balance_dividends > 0 %}
 <span style="font-size: 100%; color:green">&nbsp; +{{ item.shares_balance_dividends|floatformat:2 }} ({{ item.shares_yield_dividends|floatformat:2 }}%)</span>
@@ -61,17 +61,67 @@
         </td>
         <td>{{ s.last_history.price|floatformat:2 }}</td>
         <td>{{ s.portion|floatformat:2 }}</td>
-        <td>{{ s.price_all_dividends|floatformat:2 }} ({{ s.dividend_yield|floatformat:2 }} %)</td>
+        <td>{{ s.price_all_income|floatformat:2 }} ({{ s.income_yield|floatformat:2 }} %)</td>
         <td>
-        {% if s.percent_with_dividends > 0 %}
-        <span style="color:green">+{{ s.percent_with_dividends|floatformat:2 }} %</span>
+        {% if s.percent_with_income > 0 %}
+        <span style="color:green">+{{ s.percent_with_income|floatformat:2 }} %</span>
         {% else %}
-        <span style="color:red">{{ s.percent_with_dividends|floatformat:2 }} %</span>
+        <span style="color:red">{{ s.percent_with_income|floatformat:2 }} %</span>
         {% endif %}
         </td>
     </tr>
     {% endfor %}
 </table>
+
+
+
+<hr/>
+<br/>
+
+<span style="font-size: 200%; color:black">Облигации: {{ item.bonds_price|floatformat:2 }}</span>
+{% if item.bonds_balance > 0 %}
+<span style="font-size: 200%; color:green">&nbsp; +{{ item.bonds_balance|floatformat:2 }} ({{ item.bonds_yield|floatformat:2 }}%)</span>
+{% else %}
+<span style="font-size: 200%; color:red">&nbsp;  {{ item.bonds_balance|floatformat:2 }}( {{ item.bonds_yield|floatformat:2 }}%)</span>
+{% endif %}
+<br />
+<span style="font-size: 100%; color:black">Всего выплачено купонов:</span>
+<span style="font-size: 100%; color:green">&nbsp; {{ item.bonds_coupons|floatformat:2 }} ({{ item.bonds_yield_coupons|floatformat:2 }}%)</span>
+
+
+<table>
+    <tr>
+        <th>Инструмент</th>
+        <th>Код</th>
+        <th>Средняя<br/>(грязная)</th>
+        <th>Рынок<br/>(грязная)</th>
+        <th>Прибыль</th>
+        <th>Сумма<br/>(грязная)</th>
+        <th>НКД</th>
+        <th>Доля, %</th>
+        <th>Выплаченные купоны</th>
+    </tr>
+    {% for s in item.bonds.all %}
+    <tr>
+        <td><a href="{% url 'share_item' s.id %}">{{ s.bond.short_name }}</a></td>
+        <td>{{ s.bond.sec_id }}</td>
+        <td>{{ s.avg_price|floatformat:2 }}</td>
+        <td>{{ s.last_history.price_single|floatformat:2 }}</td>
+        <td>
+        {% if s.percent > 0 %}
+        <span style="color:green">+{{ s.percent|floatformat:2 }} %</span>
+        {% else %}
+        <span style="color:red">{{ s.percent|floatformat:2 }} %</span>
+        {% endif %}
+        </td>
+        <td>{{ s.last_history.price|floatformat:2 }}</td>
+        <td>{{ s.nkd|floatformat:2 }}</td>
+        <td>{{ s.portion|floatformat:2 }}</td>
+        <td>{{ s.price_all_income|floatformat:2 }} ({{ s.income_yield|floatformat:2 }} %)</td>
+    </tr>
+    {% endfor %}
+</table>
+
 
 
 {% endblock %}

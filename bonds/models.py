@@ -11,16 +11,41 @@ from django.db import transaction
 
 from dinv.utils import daterange
 from dinv.utils import UnicodeDictReader
-from securities.models import BondHistory, AbstractSecurityItem, AbstractItemTransaction
+from securities.models import BondHistory, AbstractSecurityItem, AbstractItemTransaction, Bond, AbstractItemHistory, AbstractItemIncome
 
 class BondTransaction(AbstractItemTransaction):
     bond_item = models.ForeignKey('BondItem',
                               verbose_name = u'Актив',
                               related_name = 'transactions',
                               help_text = u'Сделка по какому активу')
-
+    
+    accint = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'НКД',
+                               help_text = u'Накопленный купонный доход (НКД), по одной ценной бумаге')
+    
+    def total_price(self):
+        return (self.price + self.accint) * self.volume
+    
     @property
     def sec_item(self): return self.bond_item
+
+    @staticmethod
+    def create(bond_item, action, volume, price, date, comment, accint, key = None):
+        s = BondTransaction()
+        s.bond_item = bond_item
+        s.action = action
+        s.volume = volume
+        s.price = price
+        s.date = date
+        s.comment = comment
+        s.key = key
+        s.accint = accint
+        s.save()
+        return s
+
 
     @staticmethod
     @transaction.atomic
@@ -47,27 +72,148 @@ class BondTransaction(AbstractItemTransaction):
             print row[cols['date']]
             date = datetime.datetime.strptime(row[cols['date']], "%d.%m.%Y %H:%M:%S")
             volume = int(row[cols['volume']])
-            price = Decimal(row[cols['price']].replace(',', '.')) / s.face_value
-            print BondTransaction.create(bond_item, action, volume, price, date, '', key)
+            price = Decimal(row[cols['price']].replace(',', '.'))
+            
+            h = BondHistory.objects.filter(bond = s).filter(trade_date = date.date())[0]
+            
+            print BondTransaction.create(bond_item, action, volume, price, date, '', h.accint, key)
 
+
+class BondItemHistory(AbstractItemHistory):
+    class Meta:
+        unique_together = ('bond_item', 'date')
+        ordering = ['-date', ]
+        verbose_name = u'История пакета облигаций'
+        verbose_name_plural = u'Истории пакетов облигаций'
+
+    
+    @property
+    def sec_item(self): return self.bond_item
+    
+    bond_item = models.ForeignKey('BondItem',
+                              verbose_name = u'Актив',
+                              related_name = 'history',
+                              help_text = u'История актива')
+    
+    accint = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'НКД',
+                               help_text = u'Накопленный купонный доход (НКД), по одной ценной бумаге')
+
+    yield_close = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               null = True,
+                               blank = True,
+                               verbose_name = u'Доходность, % годовых - последней сделки',
+                               help_text = u'Доходность по цене последней сделки, % годовых')
+    
+    def price(self):
+        return self.price_single() * self.volume
+    
+    def price_single(self):
+        return self.legal_close_price + self.accint
+    
+    @staticmethod
+    def get(bond_item, date):
+        return BondItemHistory.objects.filter(bond_item = bond_item, date = date).all()[0]
+    
+    @staticmethod
+    def has(bond_item, date):
+        return BondItemHistory.objects.filter(bond_item = bond_item, date = date).count() > 0
+    
+    @staticmethod
+    def update(bond_item, date, create = False):
+        if not create and not BondHistory.has(bond_item.bond, date):
+            return None
+
+        sih = BondItemHistory()
+        if not create and BondItemHistory.has(bond_item, date):
+            sih = BondItemHistory.get(bond_item, date)
+        else:
+            sih.bond_item = bond_item
+            sih.date = date
+        bh = BondHistory.get(bond_item.bond, date)
+        sih.legal_close_price = bh.legal_close_price
+        sih.accint = bh.accint
+        sih.yield_close = bh.yield_close
+        sih.volume, sih.avg_price = bond_item.get_volume_and_price(date)
+        sih.save()
+        return sih
+    
+    @staticmethod
+    def create(bond_item, date):
+        return BondItemHistory.update(bond_item, date, True)
+
+
+class BondItemCoupon(AbstractItemIncome):
+    class Meta:
+        ordering = ['-date', ]
+        verbose_name = u'Выплаченный купон'
+        verbose_name_plural = u'Выплаченные купоны'
+    
+    @property
+    def sec_item(self): return self.bond_item
+
+    date = models.DateField(verbose_name = u'Дата выплаты')
+    
+    bond_item = models.ForeignKey('BondItem',
+                              verbose_name = u'Актив',
+                              related_name = 'coupons',
+                              help_text = u'Актив')
+    
+    comment = models.TextField(blank = True,
+                               null = True,
+                               verbose_name = u'Комментарий')
+                                  
 
 class BondItem(AbstractSecurityItem):
-	class Meta:
-		unique_together = ('bond', 'portfolio')
-		verbose_name = u'Пакет облигаций'
-		verbose_name_plural = u'Пакеты облигаций'
+    class Meta:
+        unique_together = ('bond', 'portfolio')
+        verbose_name = u'Пакет облигаций'
+        verbose_name_plural = u'Пакеты облигаций'
 
-	TransactionModel = BondTransaction
+    TransactionModel = BondTransaction
+    HistoryModel = BondItemHistory
+    IncomeModel = BondItemCoupon
 
-	@property
-	def sec(self): return self.bond
+    @property
+    def sec(self): return self.bond
 
-	bond = models.ForeignKey('securities.Bond',
+    @property
+    def income(self): return self.coupons
+
+    bond = models.ForeignKey('securities.Bond',
                               verbose_name = u'Облигация')
     
-	portfolio = models.ForeignKey('portfolio.Portfolio',
+    portfolio = models.ForeignKey('portfolio.Portfolio',
                                   related_name = 'bonds',
                                   verbose_name = u'Портфель')
+    
+    @staticmethod
+    def get(portfolio, bond):
+        return BondItem.objects.filter(portfolio = portfolio).filter(bond = bond)[0]
+    
+    @staticmethod
+    def has(portfolio, bond):
+        return BondItem.objects.filter(portfolio = portfolio).filter(bond = bond).count() > 0
+    
+    @staticmethod
+    def get_or_create(portfolio, bond):
+        if BondItem.has(portfolio, bond):
+            return BondItem.get(portfolio, bond)
+        s = BondItem()
+        s.portfolio = portfolio
+        s.bond = bond
+        s.volume = 0
+        s.avg_price = Decimal("0")
+        s.save()
+        return s
+    
+    def nkd(self):
+        return self.last_history().accint * self.volume
+
 
 
 
@@ -259,7 +405,7 @@ def update_from_transactions(sender, instance, **kwargs):
     
 post_save.connect(update_from_transactions, sender = BondTransaction)
 post_delete.connect(update_from_transactions, sender = BondTransaction)
-
+"""
 class BondItemHistory(models.Model):
     class Meta:
         ordering = ['-date', ]
@@ -343,3 +489,4 @@ class BondItemHistory(models.Model):
     @staticmethod
     def create(bond_item, date):
         return BondItemHistory.update(bond_item, date, True)
+"""

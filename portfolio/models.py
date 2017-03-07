@@ -40,7 +40,7 @@ class Portfolio(models.Model):
     def shares_dividends(self):
         d = Decimal(0)
         for s in self.shares.all():
-            d += s.price_all_dividends()
+            d += s.price_all_income()
         return d
     
     def shares_balance_dividends(self):
@@ -63,4 +63,33 @@ class Portfolio(models.Model):
             s.portion = s.last_history().price() / sp * Decimal(100.0)
             ret['shares'].append(s)
         return ret
+    
+    """BONDS"""
+    def bonds_price_balance(self):
+        p = Decimal(0)
+        b = Decimal(0)
+        for s in self.bonds.all():
+            p += s.last_history().price()
+            b += s.balance()
+        return p, b
+    
+    def bonds_price(self):
+        return self.bonds_price_balance()[0]
+    
+    def bonds_balance(self):
+        return self.bonds_price_balance()[1]
+    
+    def bonds_yield(self):
+        return self.bonds_balance() / self.bonds_price() * Decimal(100.0)
+    
+    def bonds_coupons(self):
+        d = Decimal(0)
+        for s in self.bonds.all():
+            d += s.price_all_income()
+        return d
+    
+    def bonds_yield_coupons(self):
+        return self.bonds_coupons() / self.bonds_price() * Decimal(100.0)
+    
+    
     

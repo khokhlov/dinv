@@ -28,7 +28,12 @@ def daterange(start_date, end_date):
     for n in range(0, int ((end_date - start_date).days + 1), 30):
         yield start_date + timedelta(n)
 
-for s in Share.objects.all():
+q = Share.objects.all()
+if len(sys.argv) > 1:
+    q = Share.objects.filter(sec_id = sys.argv[1])
+    
+"""
+for s in q:
     print 'Update share %s' %s
     for d1 in daterange(DATE_FROM, DATE_TO):
         d2 = d1 + timedelta(30)
@@ -42,11 +47,30 @@ for s in Share.objects.all():
                 sh = ShareHistory()
                 sh.share = s
                 sh.num_trades = int(row.get('NUMTRADES'))
-                sh.low = Decimal(row.get('LOW'))
+                
+                try:
+                    sh.low = Decimal(row.get('LOW'))
+                except:
+                    print 'Skip LOW'
+
                 sh.value = Decimal(row.get('VALUE'))
-                sh.high = Decimal(row.get('HIGH'))
-                sh.open = Decimal(row.get('OPEN'))
-                sh.war_price = Decimal(row.get('WAPRICE'))
+
+                try:
+                    sh.high = Decimal(row.get('HIGH'))
+                except:
+                    print 'Skip HIGH'
+
+                try:
+                    sh.open = Decimal(row.get('OPEN'))
+                except:
+                    print 'Skip HIGH'
+                
+                try:
+                    sh.war_price = Decimal(row.get('WAPRICE'))
+                except:
+                    print 'Skip WAPRICE'
+                
+                
                 sh.legal_close_price = Decimal(row.get('LEGALCLOSEPRICE'))
                 sh.trade_date = datetime.datetime.strptime(row.get('TRADEDATE'), "%Y-%m-%d").date()
                 sh.save()
@@ -59,7 +83,7 @@ for s in Share.objects.all():
                     s.save()
             else:
                 print 'Skip date %s for share %s.' % (d, s)
-
+"""
 
 for s in Bond.objects.all():
     print 'Update bond %s' %s
@@ -77,12 +101,12 @@ for s in Bond.objects.all():
                 sh = BondHistory()
                 sh.bond = s
                 sh.num_trades = int(row.get('NUMTRADES'))
-                sh.low = Decimal(row.get('LOW'))
+                #sh.low = Decimal(row.get('LOW'))
                 sh.value = Decimal(row.get('VALUE'))
-                sh.high = Decimal(row.get('HIGH'))
+                #sh.high = Decimal(row.get('HIGH'))
                 #sh.open = Decimal(row.get('OPEN'))
-                sh.war_price = Decimal(row.get('WAPRICE'))
-                sh.legal_close_price = Decimal(row.get('LEGALCLOSEPRICE'))
+                #sh.war_price = Decimal(row.get('WAPRICE'))
+                sh.legal_close_price = Decimal(row.get('LEGALCLOSEPRICE')) * s.face_value / Decimal(100)
                 sh.trade_date = datetime.datetime.strptime(row.get('TRADEDATE'), "%Y-%m-%d").date()
                 sh.accint = Decimal(row.get('ACCINT'))
                 sh.yield_close = Decimal(row.get('YIELDCLOSE'))

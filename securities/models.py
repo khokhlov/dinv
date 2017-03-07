@@ -6,6 +6,7 @@ import django
 import datetime
 from dinv.utils import daterange
 from dinv.utils import UnicodeDictReader
+from decimal import Decimal
 
 
 class Board(models.Model):
@@ -281,26 +282,6 @@ class AbstractSecurityItem(models.Model):
                                     verbose_name = u'Средняя',
                                     help_text = u'Средняя цена')
     
-    @staticmethod
-    def get(clazz, portfolio, sec):
-        return clazz.objects.filter(portfolio = portfolio).filter(sec = sec)[0]
-    
-    @staticmethod
-    def has(clazz, portfolio, sec):
-        return clazz.objects.filter(portfolio = portfolio).filter(sec = sec).count() > 0
-    
-    @staticmethod
-    def get_or_create(clazz, portfolio, sec):
-        if clazz.has(portfolio, sec):
-            return clazz.get(portfolio, sec)
-        s = clazz()
-        s.portfolio = portfolio
-        s.sec = sec
-        s.volume = 0
-        s.avg_price = Decimal("0")
-        s.save()
-        return s
-    
     def __unicode__(self):
         return u'%s (%s)' % (self.portfolio, self.sec)
     
@@ -331,7 +312,7 @@ class AbstractSecurityItem(models.Model):
             avg_price = 0
         return volume, avg_price
     
-    def update_from_transactions(self, clazz):
+    def update_from_transactions(self):
         self.volume, self.avg_price = self.get_volume_and_price(django.utils.timezone.now().date())
         self.save()
     
@@ -350,24 +331,6 @@ class AbstractSecurityItem(models.Model):
             print 'Updating date %s' % d
             print self.HistoryModel.update(self, d)
     
-    
-    def update_income(self, date = django.utils.timezone.now().date() - datetime.timedelta(1)):
-        date_max = datetime.datetime.combine(date, datetime.datetime.max.time())
-        date_min = datetime.datetime.combine(self.first_transaction().date.date(), datetime.datetime.min.time())
-        ds = self.sec.income.filter(date_registry_close__lte = date_max).filter(date_registry_close__gte = date_min)
-        for d in ds:
-            sid = self.IncomeModel()
-            sid.sec_item = self
-            sid.dividend = d
-            sid.checked = False
-            if clazz.has(self, d):
-                sid = clazz.get(self, d)
-            if sid.checked:
-                continue
-            sid.price_no_tax = d.income * self.volume
-            sid.percent = Decimal(sid.price() / self.last_history_date(d.date_registry_close).price() * Decimal(100.0))
-            sid.save()
-   
     def price_all_income(self):
         price = Decimal(0)
         for d in self.income.all():
@@ -375,7 +338,7 @@ class AbstractSecurityItem(models.Model):
         return price
     
     def income_yield(self):
-        return self.price_all_incoms() / self.price() * Decimal(100.0)
+        return self.price_all_income() / self.price() * Decimal(100.0)
     
     def balance_with_income(self):
         return self.balance() + self.price_all_income()
@@ -404,7 +367,7 @@ class AbstractItemTransaction(models.Model):
                                )
     
     volume = models.IntegerField(verbose_name = u'Количество',
-                                help_text = u'Количество облигаций')
+                                help_text = u'Количество бумаг')
     
     price = models.DecimalField(max_digits=35,
                                 decimal_places=15,
@@ -428,19 +391,6 @@ class AbstractItemTransaction(models.Model):
     def total_price(self):
         return self.price * self.volume
     
-    @staticmethod
-    def create(clazz, sec_item, action, volume, price, date, comment, key = None):
-        s = clazz()
-        s.sec_item = sec_item
-        s.action = action
-        s.volume = volume
-        s.price = price
-        s.date = date
-        s.comment = comment
-        s.key = key
-        s.save()
-        return s
-
 class AbstractItemHistory(models.Model):
     class Meta:
         ordering = ['-date', ]
@@ -449,7 +399,7 @@ class AbstractItemHistory(models.Model):
         abstract = True
     
     volume = models.IntegerField(verbose_name = u'Количество',
-                                help_text = u'Количество облигаций')
+                                help_text = u'Количество бумаг')
     
     legal_close_price = models.DecimalField(max_digits=35,
                                 decimal_places=15,
@@ -465,7 +415,7 @@ class AbstractItemHistory(models.Model):
     date = models.DateField(verbose_name = u'Дата торгов')
     
     def price(self):
-        return self.legal_close_price * self.volume / Decimal(100)
+        return self.legal_close_price * self.volume
     
     def buy_price(self):
         return self.avg_price * self.volume
@@ -476,11 +426,36 @@ class AbstractItemHistory(models.Model):
     def __unicode__(self):
         return u'%s - %s - %s' % (self.sec_item, self.date, self.price())
     
-    @staticmethod
-    def get(clazz, sec_item, date):
-        return clazz.objects.filter(sec_item = sec_item, date = date).all()[0]
+
+class AbstractItemIncome(models.Model):
+    class Meta:
+        verbose_name = u'Выплаченный доход'
+        verbose_name_plural = u'Выплаченные доходы'
+        abstract = True
+        
+    price_no_tax = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'Сумма выплат',
+                               help_text = u'Сумма выплат без налога')
+                               
+    tax = models.DecimalField(default = Decimal("13"),
+                                max_digits=35,
+                                decimal_places=15,
+                               verbose_name = u'НДФЛ, %',
+                               help_text = u'Величина налога')
     
-    @staticmethod
-    def has(clazz, sec_item, date):
-        return clazz.objects.filter(sec_item = sec_item, date = date).count() > 0
+    checked = models.BooleanField(default = False,
+                                  verbose_name = u'Подтверждена',
+                                  help_text = u'Подтверждение получения на счет')
+    
+    percent = models.DecimalField(max_digits=35,
+                                decimal_places=15,
+                                blank = True,
+                               null = True,
+                               verbose_name = u'Доходность, %',
+                               help_text = u'Доходность на дату выплаты с учетом налога, %')
+    
+    def price(self):
+        return self.price_no_tax * (Decimal(100.0) - self.tax) / Decimal(100.0)
+    
     
