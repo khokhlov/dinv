@@ -91,5 +91,11 @@ class Portfolio(models.Model):
     def bonds_yield_coupons(self):
         return self.bonds_coupons() / self.bonds_price() * Decimal(100.0)
     
+    def bonds_cost(self):
+        p = Decimal(0)
+        for s in self.bonds.all():
+            p += s.last_history().cost()
+        return p
+    
     
     

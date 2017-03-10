@@ -106,7 +106,7 @@ for s in Bond.objects.all():
                 #sh.high = Decimal(row.get('HIGH'))
                 #sh.open = Decimal(row.get('OPEN'))
                 #sh.war_price = Decimal(row.get('WAPRICE'))
-                sh.legal_close_price = Decimal(row.get('LEGALCLOSEPRICE')) * s.face_value / Decimal(100)
+                sh.legal_close_price = Decimal(row.get('LEGALCLOSEPRICE'))
                 sh.trade_date = datetime.datetime.strptime(row.get('TRADEDATE'), "%Y-%m-%d").date()
                 sh.accint = Decimal(row.get('ACCINT'))
                 sh.yield_close = Decimal(row.get('YIELDCLOSE'))

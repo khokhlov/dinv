@@ -78,12 +78,7 @@
 <hr/>
 <br/>
 
-<span style="font-size: 200%; color:black">Облигации: {{ item.bonds_price|floatformat:2 }}</span>
-{% if item.bonds_balance > 0 %}
-<span style="font-size: 200%; color:green">&nbsp; +{{ item.bonds_balance|floatformat:2 }} ({{ item.bonds_yield|floatformat:2 }}%)</span>
-{% else %}
-<span style="font-size: 200%; color:red">&nbsp;  {{ item.bonds_balance|floatformat:2 }}( {{ item.bonds_yield|floatformat:2 }}%)</span>
-{% endif %}
+<span style="font-size: 200%; color:black">Облигации: {{ item.bonds_cost|floatformat:2 }}</span>
 <br />
 <span style="font-size: 100%; color:black">Всего выплачено купонов:</span>
 <span style="font-size: 100%; color:green">&nbsp; {{ item.bonds_coupons|floatformat:2 }} ({{ item.bonds_yield_coupons|floatformat:2 }}%)</span>
@@ -93,10 +88,10 @@
     <tr>
         <th>Инструмент</th>
         <th>Код</th>
-        <th>Средняя<br/>(грязная)</th>
-        <th>Рынок<br/>(грязная)</th>
+        <th>Средняя</th>
+        <th>Рынок</th>
         <th>Прибыль</th>
-        <th>Сумма<br/>(грязная)</th>
+        <th>Стоимость позиции</th>
         <th>НКД</th>
         <th>Доля, %</th>
         <th>Выплаченные купоны</th>
@@ -106,7 +101,7 @@
         <td><a href="{% url 'share_item' s.id %}">{{ s.bond.short_name }}</a></td>
         <td>{{ s.bond.sec_id }}</td>
         <td>{{ s.avg_price|floatformat:2 }}</td>
-        <td>{{ s.last_history.price_single|floatformat:2 }}</td>
+        <td>{{ s.last_history.legal_close_price|floatformat:2 }}</td>
         <td>
         {% if s.percent > 0 %}
         <span style="color:green">+{{ s.percent|floatformat:2 }} %</span>
@@ -114,7 +109,7 @@
         <span style="color:red">{{ s.percent|floatformat:2 }} %</span>
         {% endif %}
         </td>
-        <td>{{ s.last_history.price|floatformat:2 }}</td>
+        <td>{{ s.last_history.cost|floatformat:2 }}</td>
         <td>{{ s.nkd|floatformat:2 }}</td>
         <td>{{ s.portion|floatformat:2 }}</td>
         <td>{{ s.price_all_income|floatformat:2 }} ({{ s.income_yield|floatformat:2 }} %)</td>

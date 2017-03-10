@@ -26,9 +26,7 @@ class BondTransaction(AbstractItemTransaction):
                                verbose_name = u'НКД',
                                help_text = u'Накопленный купонный доход (НКД), по одной ценной бумаге')
     
-    def total_price(self):
-        return (self.price + self.accint) * self.volume
-    
+  
     @property
     def sec_item(self): return self.bond_item
 
@@ -72,7 +70,7 @@ class BondTransaction(AbstractItemTransaction):
             print row[cols['date']]
             date = datetime.datetime.strptime(row[cols['date']], "%d.%m.%Y %H:%M:%S")
             volume = int(row[cols['volume']])
-            price = Decimal(row[cols['price']].replace(',', '.'))
+            price = Decimal(row[cols['price']].replace(',', '.')) / s.face_value * Decimal(100)
             
             h = BondHistory.objects.filter(bond = s).filter(trade_date = date.date())[0]
             
@@ -109,11 +107,11 @@ class BondItemHistory(AbstractItemHistory):
                                verbose_name = u'Доходность, % годовых - последней сделки',
                                help_text = u'Доходность по цене последней сделки, % годовых')
     
-    def price(self):
-        return self.price_single() * self.volume
+    def cost(self):
+        return self.cost_single() * self.volume
     
-    def price_single(self):
-        return self.legal_close_price + self.accint
+    def cost_single(self):
+        return self.legal_close_price * self.bond_item.bond.face_value / Decimal(100) + self.accint
     
     @staticmethod
     def get(bond_item, date):
